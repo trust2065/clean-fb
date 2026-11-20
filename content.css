@@ -32,7 +32,21 @@ html.cleanfb-rails [role="navigation"][aria-label="Shortcuts"] {
   display: none !important;
 }
 
-/* Center the content column once the rails are gone. */
-html.cleanfb-rails [role="main"] {
+/* Widen the content column into the freed space (see widenTree in content.js).
+   --cleanfb-width comes from the popup's "Content width" setting. */
+html.cleanfb-rails [data-cleanfb-wide="box"] {
+  width: 100% !important;
+  max-width: var(--cleanfb-width, 100%) !important;
   margin-inline: auto !important;
+  flex: 1 1 auto !important;
+  box-sizing: border-box !important;
+}
+
+html.cleanfb-rails [data-cleanfb-wide="max"] {
+  max-width: var(--cleanfb-width, 100%) !important;
+}
+
+/* A little breathing room at the window edges. */
+html.cleanfb-rails [role="main"] {
+  padding-inline: 16px !important;
 }

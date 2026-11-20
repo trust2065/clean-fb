@@ -11,7 +11,8 @@
     reels: true,
     friends: true, // 你可能認識的朋友 / People you may know
     groups: true, // 你的社團建議 / Suggested groups
-    suggested: false // "Suggested for you" posts from pages you don't follow
+    suggested: false, // "Suggested for you" posts from pages you don't follow
+    contentWidth: "100%" // max width of the widened content column
   };
   const FILTERS = ["ads", "reels", "friends", "groups", "suggested"];
   // Pages where the side rails are the content (e.g. Messenger chat list).
@@ -24,6 +25,7 @@
     const on = settings.enabled;
     root.classList.toggle("cleanfb-rails", on && settings.centerFeed && !railsExcluded());
     for (const f of FILTERS) root.classList.toggle(`cleanfb-${f}`, on && settings[f]);
+    root.style.setProperty("--cleanfb-width", settings.contentWidth || "100%");
   }
 
   // Apply defaults immediately (we run at document_start) so nothing flashes
@@ -217,6 +219,7 @@
     if (!unit.isConnected || unit.hasAttribute(HIDE_ATTR)) return;
     const type = classify(unit);
     if (type) unit.setAttribute(HIDE_ATTR, type);
+    else if (wideActive()) widenTree(unit, 8, 4);
   }
 
   // ---------------------------------------------------------------------------
@@ -244,13 +247,117 @@
         if (sib === node || sib.hasAttribute(RAIL_ATTR)) continue;
         if (sib.matches('[role="banner"], [role="dialog"]') || sib.querySelector('[role="banner"], [role="dialog"]')) continue;
         const r = sib.getBoundingClientRect();
-        if (r.width < 100 || r.height < vh * 0.5 || r.top > 200) continue;
+        if (r.width < 100) continue;
         const left = r.right <= mr.left + 2;
         const right = r.left >= mr.right - 2;
         if (!left && !right) continue;
-        if (r.bottom <= mr.top || r.top >= mr.bottom) continue;
+        // Empty wrapper whose contents our CSS already hid, but which still
+        // reserves its column width.
+        const emptySpacer = r.height < 10;
+        if (!emptySpacer) {
+          if (r.height < vh * 0.5 || r.top > 200) continue;
+          if (r.bottom <= mr.top || r.top >= mr.bottom) continue;
+        }
         sib.setAttribute(RAIL_ATTR, left ? "left" : "right");
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Widen the content column into the space the rails used to take
+  // ---------------------------------------------------------------------------
+  // Facebook caps the feed at ~680px with obfuscated classes, so we detect the
+  // caps by layout instead: walking down from the container that held the
+  // rails, any wide block (>= 500px) that is narrower than its parent gets
+  // data-cleanfb-wide="box" (stretched); wide blocks with a px max-width get
+  // data-cleanfb-wide="max" (cap lifted). Small things (avatars, buttons) and
+  // deep media inside posts are left alone.
+  const WIDE_ATTR = "data-cleanfb-wide";
+  const MIN_WIDE = 500;
+  const RAIL_SEL = [
+    `[${RAIL_ATTR}]`, '[role="complementary"]', '[data-pagelet="LeftRail"]', '[data-pagelet="RightRail"]',
+    '[role="navigation"][aria-label="捷徑"]', '[role="navigation"][aria-label="Shortcuts"]'
+  ].join(",");
+  let wideChanged = false;
+  let lastMainWidth = 0;
+
+  // Only widen on pages that had side rails (home feed, groups, ...), not on
+  // pages with their own layout (profiles, Messenger).
+  function wideActive() {
+    return root.classList.contains("cleanfb-rails") && !!document.querySelector(RAIL_SEL);
+  }
+
+  function markWide(el, mode) {
+    const cur = el.getAttribute(WIDE_ATTR);
+    if (cur === mode || cur === "box") return;
+    el.setAttribute(WIDE_ATTR, mode);
+    wideChanged = true;
+  }
+
+  // Does `el` share its row with a visible sibling column (e.g. a group's
+  // "About" box next to its posts)? Then stretching it would break the layout.
+  function hasSideSibling(el, r) {
+    for (const sib of el.parentElement.children) {
+      if (sib === el) continue;
+      const s = sib.getBoundingClientRect();
+      if (s.width < 150 || s.height < 50) continue;
+      if (s.bottom > r.top && s.top < r.bottom) return true;
+    }
+    return false;
+  }
+
+  // Fit one element to its parent: stretch it if it's capped narrower than the
+  // parent, or lift a px max-width cap.
+  function fitToParent(el, allowBox) {
+    if (el.matches('[role="banner"], [role="dialog"], img, video, svg, canvas')) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width < MIN_WIDE) return false;
+    const parentWidth = el.parentElement.getBoundingClientRect().width;
+    if (allowBox && r.width < parentWidth * 0.9 && !hasSideSibling(el, r)) markWide(el, "box");
+    else if (getComputedStyle(el).maxWidth.endsWith("px")) markWide(el, "max");
+    return true;
+  }
+
+  // Breadth-first so each parent is widened before its children are measured.
+  function widenTree(start, maxDepth, boxDepth, stopAtUnits = false) {
+    const queue = [[start, 0]];
+    while (queue.length) {
+      const [el, depth] = queue.shift();
+      for (const child of el.children) {
+        if (child.hasAttribute(RAIL_ATTR) || child.hasAttribute(HIDE_ATTR)) continue;
+        if (!fitToParent(child, depth < boxDepth)) continue;
+        if (stopAtUnits && child.matches(UNIT_SEL)) continue; // posts handled in checkUnit
+        if (depth + 1 < maxDepth) queue.push([child, depth + 1]);
+      }
+    }
+  }
+
+  function widenLayout() {
+    if (!wideActive()) return;
+    const main = document.querySelector('[role="main"]');
+    if (!main) return;
+
+    // 1. The path from <body> down to [role=main], outermost first.
+    const chain = [];
+    for (let el = main; el && el !== document.body; el = el.parentElement) chain.unshift(el);
+    for (const el of chain) fitToParent(el, true);
+
+    // 2. Everything inside main down to the posts (feed column, composer, stories).
+    widenTree(main, 30, 30, true);
+
+    // Column width changed: re-fit posts already on the page.
+    const mw = Math.round(main.getBoundingClientRect().width);
+    if (mw !== lastMainWidth) {
+      lastMainWidth = mw;
+      document.querySelectorAll(UNIT_SEL).forEach((u) => pendingUnits.add(unitOf(u)));
+      schedule();
+    }
+
+    if (wideChanged) {
+      wideChanged = false;
+      railsDirty = true; // layout moved; re-check for rails/caps once more
+      // Let Facebook recompute image/video sizes for the new width.
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
     }
   }
 
@@ -273,7 +380,11 @@
     frame = 0;
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;
-      document.querySelectorAll(`[${RAIL_ATTR}]`).forEach((el) => el.removeAttribute(RAIL_ATTR));
+      document.querySelectorAll(`[${RAIL_ATTR}], [${WIDE_ATTR}]`).forEach((el) => {
+        el.removeAttribute(RAIL_ATTR);
+        el.removeAttribute(WIDE_ATTR);
+      });
+      lastMainWidth = 0;
       applyClasses();
       fullScan = true;
       railsDirty = true;
@@ -296,6 +407,7 @@
       lastRailCheck = now;
       railsDirty = false;
       markRails();
+      widenLayout();
     } else if (railsDirty) {
       setTimeout(schedule, 500);
     }
@@ -343,5 +455,7 @@
     applyClasses();
     railsDirty = true;
     schedule();
+    // Width or rails toggled: let Facebook re-fit images/videos.
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
   });
 })();
