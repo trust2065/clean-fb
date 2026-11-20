@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Clean FB",
-  "description": "Hide ads, Reels, and friend recommendations on Facebook.",
+  "description": "Content-only Facebook: hide side rails, ads, Reels and friend suggestions.",
   "version": "1.0.0",
   "permissions": ["storage"],
   "host_permissions": [
@@ -22,7 +22,7 @@
       ],
       "js": ["content.js"],
       "css": ["content.css"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ]
 }

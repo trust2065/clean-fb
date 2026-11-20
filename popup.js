@@ -1,48 +1,29 @@
-const defaults = { enabled: true, ads: true, reels: true, friends: true };
-const keys = Object.keys(defaults);
+// Keep in sync with DEFAULTS in content.js. Content scripts react to
+// chrome.storage changes, so every open Facebook tab updates live.
+const DEFAULTS = { enabled: true, centerFeed: true, ads: true, reels: true, friends: true, groups: true, suggested: false };
 
-function getSettings(callback) {
-  chrome.storage.sync.get(keys, (stored) => callback({ ...defaults, ...stored }));
-}
+const inputs = [...document.querySelectorAll("input[data-key]")];
+const toggleAll = document.querySelector("#toggleAll");
 
-function saveSettings(settings) {
-  chrome.storage.sync.set(settings);
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]?.id) {
-      chrome.tabs.sendMessage(tabs[0].id, { type: "settingsChanged", settings });
-    }
-  });
-}
-
-getSettings((settings) => {
-  const ads = document.querySelector("#ads");
-  const reels = document.querySelector("#reels");
-  const friends = document.querySelector("#friends");
-  const toggleAll = document.querySelector("#toggleAll");
-
-  ads.checked = settings.ads;
-  reels.checked = settings.reels;
-  friends.checked = settings.friends;
+function render(settings) {
+  for (const input of inputs) {
+    input.checked = settings[input.dataset.key];
+    input.disabled = !settings.enabled;
+  }
   toggleAll.textContent = settings.enabled ? "On" : "Off";
   toggleAll.setAttribute("aria-pressed", String(settings.enabled));
-  [ads, reels, friends].forEach((input) => {
-    input.disabled = !settings.enabled;
-  });
+}
 
-  for (const [key, input] of [["ads", ads], ["reels", reels], ["friends", friends]]) {
-    input.addEventListener("change", () => {
-      getSettings((current) => saveSettings({ ...current, [key]: input.checked }));
-    });
-  }
+chrome.storage.sync.get(DEFAULTS, render);
 
-  toggleAll.addEventListener("click", () => {
-    getSettings((current) => {
-      const enabled = !current.enabled;
-      const next = { ...current, enabled };
-      saveSettings(next);
-      toggleAll.textContent = enabled ? "On" : "Off";
-      toggleAll.setAttribute("aria-pressed", String(enabled));
-      [ads, reels, friends].forEach((input) => { input.disabled = !enabled; });
-    });
+for (const input of inputs) {
+  input.addEventListener("change", () => chrome.storage.sync.set({ [input.dataset.key]: input.checked }));
+}
+
+toggleAll.addEventListener("click", () => {
+  chrome.storage.sync.get(DEFAULTS, (s) => {
+    const next = { ...s, enabled: !s.enabled };
+    chrome.storage.sync.set({ enabled: next.enabled });
+    render(next);
   });
 });

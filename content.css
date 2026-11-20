@@ -1,19 +1,38 @@
-html.clean-fb-hide-ads [data-clean-fb="ads"],
-html.clean-fb-hide-reels [data-clean-fb="reels"],
-html.clean-fb-hide-friends [data-clean-fb="friends"] {
+/* ---------------------------------------------------------------------------
+   Feed filters. content.js tags each feed unit with data-cleanfb-hide="<type>";
+   the class on <html> decides whether that type is hidden, so toggling in the
+   popup is instant and reversible.
+   --------------------------------------------------------------------------- */
+html.cleanfb-ads [data-cleanfb-hide="ads"],
+html.cleanfb-reels [data-cleanfb-hide="reels"],
+html.cleanfb-friends [data-cleanfb-hide="friends"],
+html.cleanfb-groups [data-cleanfb-hide="groups"],
+html.cleanfb-suggested [data-cleanfb-hide="suggested"] {
   display: none !important;
 }
 
-/* Facebook uses Reel links in several navigation layouts. */
-html.clean-fb-hide-reels a[href*="/reel"],
-html.clean-fb-hide-reels a[href*="/reels"] {
+/* Instant CSS-only hiding for cheap, reliable signals, so freshly loaded posts
+   are hidden before the script even runs. */
+html.cleanfb-reels [role="feed"] > :has(a[href*="/reel"]),
+html.cleanfb-groups [role="feed"] > :has(a[href*="/groups/discover"]),
+html.cleanfb-friends [role="feed"] > :has(a[href*="/friends/suggestions"]),
+html.cleanfb-ads [role="feed"] > :has(a[href*="/ads/about"]) {
   display: none !important;
 }
 
-/* Hide Reel containers as soon as their identifying link is inserted. */
-html.clean-fb-hide-reels [role="article"]:has(a[href*="/reel"]),
-html.clean-fb-hide-reels [role="article"]:has(a[href*="/reels"]),
-html.clean-fb-hide-reels [data-pagelet]:has(a[href*="/reel"]),
-html.clean-fb-hide-reels [data-pagelet]:has(a[href*="/reels"]) {
+/* ---------------------------------------------------------------------------
+   Left & right rails: keep only the content column.
+   --------------------------------------------------------------------------- */
+html.cleanfb-rails [data-cleanfb-rail],
+html.cleanfb-rails [role="complementary"],
+html.cleanfb-rails [data-pagelet="LeftRail"],
+html.cleanfb-rails [data-pagelet="RightRail"],
+html.cleanfb-rails [role="navigation"][aria-label="捷徑"],
+html.cleanfb-rails [role="navigation"][aria-label="Shortcuts"] {
   display: none !important;
+}
+
+/* Center the content column once the rails are gone. */
+html.cleanfb-rails [role="main"] {
+  margin-inline: auto !important;
 }
