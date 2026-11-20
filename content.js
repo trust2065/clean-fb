@@ -118,6 +118,25 @@
     return u;
   }
 
+  // Comments are [role=article] too, and a reel/video post's comment links all
+  // point to /reel/...?comment_id=..., so without exempting them every comment
+  // under a reel would be classified as "reels" and hidden.
+  const COMMENT_LABEL = /comment|reply|留言|回覆|回复|评论|評論|bìnhluận|phảnhồi/i;
+  function isComment(el) {
+    for (let a = el.closest('[role="article"]'); a; a = a.parentElement && a.parentElement.closest('[role="article"]')) {
+      if (COMMENT_LABEL.test(norm(a.getAttribute("aria-label")))) return true;
+    }
+    return false;
+  }
+
+  // Never filter things the user opened on purpose (post dialog, comments).
+  // Posts in the feed itself are never treated as comments.
+  const FEED_POST_SEL = '[role="feed"] > *, [aria-posinset], [data-pagelet^="FeedUnit"]';
+  function exempt(el) {
+    if (el.closest('[role="dialog"]')) return true;
+    return isComment(el) && !el.closest(FEED_POST_SEL);
+  }
+
   function isAd(unit) {
     // Direct signals.
     if (unit.querySelector('a[href*="/ads/about"], a[href*="facebook.com/ads/"], a[aria-label="Sponsored"], a[aria-label="贊助"], a[aria-label="赞助"]')) {
@@ -169,6 +188,7 @@
 
   function headingIn(unit) {
     for (const el of unit.querySelectorAll(HEADING_SEL)) {
+      if (isComment(el)) continue;
       const type = headingType(el);
       if (type) return type;
     }
@@ -206,7 +226,7 @@
     if (!scope.isConnected || !scope.closest('[role="main"]') && !scope.querySelector('[role="main"]')) return;
     const els = scope.matches(HEADING_SEL) ? [scope] : scope.querySelectorAll(HEADING_SEL);
     for (const el of els) {
-      if (el.closest(`[${HIDE_ATTR}]`)) continue;
+      if (el.closest(`[${HIDE_ATTR}]`) || el.closest('[role="dialog"]') || isComment(el)) continue;
       const type = headingType(el);
       if (!type) continue;
       const card = cardFromHeading(el);
@@ -216,7 +236,7 @@
 
   // Always classify (even if a filter is off) so toggling only flips a CSS class.
   function checkUnit(unit) {
-    if (!unit.isConnected || unit.hasAttribute(HIDE_ATTR)) return;
+    if (!unit.isConnected || unit.hasAttribute(HIDE_ATTR) || exempt(unit)) return;
     const type = classify(unit);
     if (type) unit.setAttribute(HIDE_ATTR, type);
     else if (wideActive()) widenTree(unit, 8, 4);
@@ -427,6 +447,14 @@
     }
   }
 
+  // Facebook may overwrite <html class>, which would drop our filter classes:
+  // put them back if any went missing.
+  function classesMissing() {
+    const on = settings.enabled;
+    if (root.classList.contains("cleanfb-rails") !== (on && settings.centerFeed && !railsExcluded())) return true;
+    return FILTERS.some((f) => root.classList.contains(`cleanfb-${f}`) !== !!(on && settings[f]));
+  }
+
   const observer = new MutationObserver((records) => {
     for (const rec of records) {
       if (rec.type === "childList") rec.addedNodes.forEach(collect);
@@ -436,6 +464,8 @@
     schedule();
   });
   observer.observe(root, { childList: true, subtree: true, characterData: true });
+  new MutationObserver(() => { if (classesMissing()) applyClasses(); })
+    .observe(root, { attributes: true, attributeFilter: ["class"] });
   window.addEventListener("resize", () => { railsDirty = true; schedule(); });
 
   // ---------------------------------------------------------------------------
