@@ -390,6 +390,8 @@
   let railsDirty = true;
   let frame = 0;
   let lastPath = location.pathname;
+  let lastMain = null;
+  let dialogOpen = false;
   let lastRailCheck = 0;
 
   function schedule() {
@@ -400,15 +402,24 @@
     frame = 0;
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;
-      document.querySelectorAll(`[${RAIL_ATTR}], [${WIDE_ATTR}]`).forEach((el) => {
-        el.removeAttribute(RAIL_ATTR);
-        el.removeAttribute(WIDE_ATTR);
-      });
-      lastMainWidth = 0;
+      // Opening/closing a post dialog also changes the URL, but the page
+      // underneath stays. Skip the layout reset in that case, otherwise the
+      // width visibly jumps.
+      const main = document.querySelector('[role="main"]');
+      const viaDialog = dialogOpen || !!document.querySelector('[role="dialog"]');
+      if (main !== lastMain || !viaDialog) {
+        document.querySelectorAll(`[${RAIL_ATTR}], [${WIDE_ATTR}]`).forEach((el) => {
+          el.removeAttribute(RAIL_ATTR);
+          el.removeAttribute(WIDE_ATTR);
+        });
+        lastMainWidth = 0;
+        fullScan = true;
+      }
       applyClasses();
-      fullScan = true;
       railsDirty = true;
     }
+    lastMain = document.querySelector('[role="main"]');
+    dialogOpen = !!document.querySelector('[role="dialog"]');
 
     if (fullScan) {
       fullScan = false;
